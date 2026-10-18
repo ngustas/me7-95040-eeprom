@@ -104,11 +104,14 @@ reason, so it can be dropped into a test script.
 - **A full EEPROM image needs no bootmode.** The ECU mirrors the chip at
   `0x600000` and serves every page except 3 and 4 (the SKC and cluster code),
   which the RAM shadow supplies. `me7_kwp_shadow.py --mirror` combines them.
-- **Live state (2026-10-18):** the flash is `Fixed.bin` (the ME7Sum-repaired
-  v0.08, with the P1681 patch), and the immobiliser is off in the EEPROM. The
-  "programming not complete" bit (page 30 byte 8 bit 7) **was set** that
-  morning and **cleared** after a programming-session flash read completed.
-  See [`docs/checksum-no-start.md`](docs/checksum-no-start.md).
+- **Live state (2026-10-18, after reflash):** the flash is `Fixed.bin` (the
+  ME7Sum-repaired v0.08, with the P1681 patch) **with the `NOREAD` tag
+  removed**: 16 bytes blanked, checksums fixed with ME7Sum, sha256
+  `cc11e501…`. It was flashed with NefMoto and verified by read-back. The
+  immobiliser is off in the EEPROM, and the programming flag (P0602, page 30
+  byte 8 bit 7) is **clear**. NefMoto clears it at the end of a write by having
+  the ECU confirm three sector checksums in a row. See
+  [`docs/checksum-no-start.md`](docs/checksum-no-start.md), section 9.
 
 Still unidentified: what the values on pages 5/6, 7/8, 9/10 and 21–25 *mean*
 (their layout and owning code are known), pages 18/19/23/26, and attribute flag

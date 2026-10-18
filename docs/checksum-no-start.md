@@ -149,7 +149,7 @@ parallel-port "Kick" interface tool). The best fit with the files:
 | 2016-07-06 | v0.02.1, v0.02.2, v0.03, v0.04 saved, not flashed (recollection; file dates) |
 | 2018-05-10 | v0.02.1 flashed **with a bad main checksum** (proven that it reached the ECU; date inferred) → test drive → home → read back as "existing mild tune" (proven read) |
 | 2018-05-10, 23:55 | v0.05: correct checksums, **plus the P1681 patch as a precaution**, because the car wasn't nearby and another failure couldn't be risked (recollection; file proven) |
-| 2018-05-11 to 14 | v0.06–v0.08 with O2/cat changes; WinOLS didn't re-sign RSA; v0.08 repaired with ME7Sum → `Fixed.bin` flashed (proven: it's on the ECU today) |
+| 2018-05-11 to 14 | v0.06–v0.08 with O2/cat changes; WinOLS didn't re-sign RSA; v0.08 repaired with ME7Sum → `Fixed.bin` flashed (proven: it was still on the ECU on 2026-10-18) |
 
 If v0.02.1 had gone on in 2016 instead, the car would have run for two years
 on a bad main checksum, which doesn't fit the no-start behaviour. That's
@@ -223,8 +223,8 @@ the same address and with the same surrounding code.
 
 v0.05 also wrote an ASCII marker, `NOREAD` followed by
 `00 00 00 00 00 00 03 32`, into erased flash at `0x0FFF90`. Every patched
-version carries it, and it's still on the ECU today. Its purpose is **not
-known**. What's established about its origin:
+version carries it, and it stayed on the ECU until it was removed on
+2026-10-18 (section 9). What's established about it:
 
 - **It isn't from NefMoto, ME7Sum, ME7EEPROM, me7_95040 or 95040tool.** The
   string appears in none of their sources or binaries (searched as ASCII and
@@ -234,8 +234,19 @@ known**. What's established about its origin:
   owner's own editing or flashing chain when v0.05 was made.
 - **It doesn't block NefMoto.** NefMoto reads this ECU fine, flash included,
   with the marker present.
-- The VAGME7 Flasher is a candidate, but its executable is packed, so
-  this couldn't be checked (see section 3).
+- **It was written before WinOLS calculated v0.05's checksums, so the
+  flasher didn't add it.** `0xFFF90` lies inside multipoint block 66
+  (`0xFC000–0xFFFFF`) and the main program checksum range, yet the v0.05 WinOLS
+  export passes all 72 checks with the tag present. The VAGME7 Flasher only
+  sees the file after it's saved, so it's **ruled out**.
+- **It's most likely WinOLS.** A forum report shows WinOLS refusing to open a
+  file carrying an ASCII `NOREAD` tag until the tag is blanked. So WinOLS
+  honours the marker, and it was present in WinOLS's own export. The exact
+  WinOLS feature that wrote it is unconfirmed: the 2005 `WinOLS.exe` on file is
+  packed, and its checksum modules don't contain the string.
+- In this image the tag is the whole of it: one 16-byte block,
+  `NOREAD` + `00 00 00 00 00 00 03 32 00 00`. There's no second hidden byte,
+  unlike the forum's file.
 
 ### The trade-off
 
@@ -268,12 +279,13 @@ day, v0.08 was run through **ME7Sum twice**, producing `Fixed.bin` and
   signature
 - **0 errors** on all 72 checks, P1681 patch included.
 
-**What's flashed today is `Fixed.bin`, byte for byte.** On 2026-10-18 the
-ECU's flash was read in normal mode with NefMoto (v1.9.8.4, which connects at
-`0x11`). Every block was verified against the ECU's own checksum. The result
-is byte-identical to `Fixed.bin`: v0.08 calibration, ME7Sum key `9f618324…`,
-the P1681 patch and the `NOREAD` marker, with 0 ME7Sum errors. The car has
-been running the ME7Sum-repaired v0.08.
+**Until 2026-10-18 the ECU ran `Fixed.bin`, byte for byte.** That day the
+flash was read in normal mode with NefMoto (v1.9.8.4, which connects at
+`0x11`), with every block verified against the ECU's own checksum. The result
+was byte-identical to `Fixed.bin`: v0.08 calibration, ME7Sum key
+`9f618324…`, the P1681 patch and the `NOREAD` marker, with 0 ME7Sum errors.
+The car had been running the ME7Sum-repaired v0.08 since 2018. The same night
+it was reflashed with `NOREAD` removed (section 9).
 
 ## 7. The ECU's live state, and the flag clearing (2026-10-18)
 
@@ -345,8 +357,10 @@ why page 30 could only be read **after** a reset.
   NefMoto asks the ECU to verify that sector's checksum (19 checks). The
   29F200/29F400 reads made **none**: NefMoto only verifies reads on a
   bottom-boot layout. So "the whole chip was covered" and "the ECU validated the
-  whole chip" moved together. A full read with the uniform `29F800` layout
-  (1 MB, zero checks) would separate them.
+  whole chip" moved together. **Resolved by NefMoto's documentation:** its
+  flashing guide says *"three matching checksums in a row clear"* the bit behind
+  P0602, and a completed KWP write ends with exactly that (section 9). So it's
+  the ECU's checksum validation that clears the flag.
 
 **When the flag was first set is not known.** It was already set at 00:26,
 before tonight's only programming session, and it was clear in the 2013
@@ -413,6 +427,52 @@ immobiliser flag is `02 02`, off (see [immo-off.md](immo-off.md)).
 
 A bricked ECU that no longer talks over OBD is recovered in **bootmode**,
 which runs from the C167 mask ROM whatever the flash contains.
+
+## 9. Removing NOREAD (2026-10-18)
+
+The `NOREAD` tag was removed and the result flashed, keeping everything else
+as it was, P1681 patch included.
+
+**How the image was made:**
+
+1. Start from the ECU's own read (`== Fixed.bin`).
+2. Set the 16-byte block at `0xFFF90` to `FF`.
+3. Run ME7Sum. Exactly the two checksums covering that area failed, and it fixed
+   them: the **main program checksum** (`@0xFFFE0`) and **multipoint block 66**
+   (`0xFC000–0xFFFFF`). The re-check showed 0 errors on all 72 checks.
+
+The result differs from the previous flash in **28 bytes in three places**: the
+multipoint table entry for block 66 (`0x1FFF6`, 7 bytes), the tag (16 bytes)
+and the program checksum (`0xFFFE0`, 7 bytes). The calibration, the RSA
+modulus and signature, and the P1681 byte are unchanged. The last 16 KB block
+is now byte-identical to stock's, and its checksum is back to stock's
+`1FFDE002`. Final image sha256: `cc11e501b0f160ee…`.
+
+**How it was flashed.** With NefMoto v1.9.8.4 over KWP2000 (HEX-USB+CAN,
+29F800BB layout, Verify Write on), after a full pre-write read that matched
+`Fixed.bin`:
+
+- **Full Write:** 19 of 19 sectors erased, programmed and checksum-verified by
+  the ECU.
+- One transient `BlockTransferDataChecksumError` on a routine-result poll
+  mid-write. NefMoto carried on, and every sector then verified.
+- At the end, NefMoto logged *"Sent 3 matching checksums with the upload
+  closed. The programming flag should be clear."* Its flashing guide documents
+  the mechanism: three matching checksums in a row clear the bit behind P0602.
+
+**Verified afterwards:**
+
+| Check | Result |
+|---|---|
+| Read-back vs flashed image | byte-identical (`cc11e501…`) |
+| ME7Sum on the read-back | 0 errors |
+| `NOREAD` anywhere in flash | none |
+| P1681 patch (`0x6C0B6`) | still `0d` |
+| Page 30 after an ECU reset | `00 28 42`, bit 7 **clear** |
+
+As with any flash, the ECU's learned adaptations reset. Never flash a copy with
+the tag stripped and the checksums *not* recalculated: the tag lies inside
+checksummed flash.
 
 ## Reproducing
 
