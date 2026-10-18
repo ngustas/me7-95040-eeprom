@@ -31,7 +31,7 @@ mean the donor car was an allroad: late C5 A6 2.7Ts used it as well.
 |---|---|
 | [`me7_95040.py`](me7_95040.py) | Validate and decode 95040 images: checksums, backup pages, named fields, side-by-side comparison, round-trip check |
 | [`tools/me7_flash_info.py`](tools/me7_flash_info.py) | Identify an ME7 flash image and dump its EEPROM page attribute table |
-| [`tools/me7_kwp_shadow.py`](tools/me7_kwp_shadow.py) | Read the EEPROM's RAM copy from a running ECU over KWP2000 (K-line, slow init `0x11`), without opening it. Read-only, and not a full chip dump |
+| [`tools/me7_kwp_shadow.py`](tools/me7_kwp_shadow.py) | Read the EEPROM from a running ECU over KWP2000 (K-line, slow init `0x11`), without opening it. Read-only. `--mirror` gives all 32 pages |
 | [`tools/pyc27.py`](tools/pyc27.py) | Read and disassemble Python 2.7 `.pyc` files from Python 3. This is how 95040tool's logic was recovered |
 | [`docs/95040-format.md`](docs/95040-format.md) | **The format reference**: checksum, page lists, full 32-page map, field offsets |
 | [`docs/checksum-no-start.md`](docs/checksum-no-start.md) | **Case study**: how a tune with an incomplete checksum caused a no-start after a few key cycles, and the P1681 patch that fixed it |
@@ -56,7 +56,7 @@ python me7_95040.py -r dump.bin                  # per-page dump with status
 python me7_95040.py -c a.bin b.bin c.bin         # compare images side by side
 python me7_95040.py --canon dump.bin -o out.bin  # show where a naive writer diverges
 python tools/me7_flash_info.py flash.bin --table # idents + EEPROM page table
-python tools/me7_kwp_shadow.py COM8 live.bin     # EEPROM RAM copy from a running ECU
+python tools/me7_kwp_shadow.py COM8 live.bin --mirror  # full EEPROM from a running ECU
 ```
 
 `me7_95040.py` exits with 1 if any page fails its checksum for no known
@@ -98,10 +98,14 @@ reason, so it can be dropped into a test script.
 - **This ECU answers KW1281 at slow-init address `0x01` and KWP2000 only at
   `0x11`.** Old tools that wake the ECU at `0x01` (ME7EEPROM, me7_95040) can't
   read it over OBD. Current NefMoto retries at `0x11`.
-- **Live state (2026-10-18):** the immobiliser is off in the EEPROM, and the
-  "programming not complete" bit (page 30 byte 8 bit 7) is **set**. The
-  P1681 patch is what keeps the car running. See
-  [`docs/checksum-no-start.md`](docs/checksum-no-start.md).
+- **A full EEPROM image needs no bootmode.** The ECU mirrors the chip at
+  `0x600000` and serves every page except 3 and 4 (the SKC and cluster code),
+  which the RAM shadow supplies. `me7_kwp_shadow.py --mirror` combines them.
+- **Live state (2026-10-18):** the flash is `Fixed.bin` (the ME7Sum-repaired
+  v0.08, with the P1681 patch), and the immobiliser is off in the EEPROM. The
+  "programming not complete" bit (page 30 byte 8 bit 7) **was set** that
+  morning and **cleared** after a programming-session flash read completed.
+  See [`docs/checksum-no-start.md`](docs/checksum-no-start.md).
 
 Still unidentified: what the values on pages 5/6, 7/8, 9/10 and 21–25 *mean*
 (their layout and owning code are known), pages 18/19/23/26, and attribute flag

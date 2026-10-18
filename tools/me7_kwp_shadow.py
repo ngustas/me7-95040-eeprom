@@ -12,12 +12,22 @@ READ-ONLY. The only services this tool can send are:
     27 SecurityAccess (login)  3E TesterPresent            82 StopCommunication
 send() refuses anything else, so it cannot write, erase or program.
 
-What it reads: ME7 keeps the EEPROM in a RAM shadow, one 16-byte slot per
-record id (page attribute table, see docs/95040-format.md). This tool reads
-the slots and rebuilds a 512-byte page image. Pages that are not shadowed -
-0 (signature), 18, 19, 28, 29 - are written as FF, so me7_95040.py treats
-them as absent. It is therefore NOT a full chip dump and must not be written
-back to an ECU. Use bootmode for a real dump.
+Two sources, both read with ReadMemoryByAddress:
+
+  * RAM shadow (default). ME7 keeps the EEPROM in RAM, one 16-byte slot per
+    record id (page attribute table, see docs/95040-format.md). Pages that are
+    not shadowed - 0 (signature), 18, 19, 28, 29 - come back as FF.
+  * Chip mirror (--mirror). The ECU maps the EEPROM chip itself at 0x600000 +
+    EEPROM offset; each read is answered "response pending" while it fetches
+    from the chip. It serves every page except 3 and 4 (SKC and cluster code),
+    which it refuses with 7F 23 12. --mirror reads the chip AND the shadow in
+    one session and fills pages 3 and 4 from the shadow, giving a complete
+    512-byte image. Overlapping pages are cross-checked and any disagreement
+    is reported.
+
+Pages still missing are written as FF, so me7_95040.py treats them as absent.
+Even a complete --mirror image is a READ of a live ECU; keep it as a
+reference baseline and validate it before trusting it.
 
 Protocol follows NefMoto Open Source (Communication/KWP2000*.cs): slow init
 at 0x11 (an ME7 that answers KW1281 at 0x01 offers KWP2000 here), one-byte
@@ -29,7 +39,8 @@ Addresses are for 4Z7907551S software 1037367582 (shadow 0x383DA8, 21 slots).
 Check another build's page table with me7_flash_info.py --table first.
 
 Usage:
-    me7_kwp_shadow.py COM8 out.bin            # also writes out.bin.raw and out.bin.log
+    me7_kwp_shadow.py COM8 out.bin            # shadow only; also writes .raw and .log
+    me7_kwp_shadow.py COM8 out.bin --mirror   # full image: chip mirror + pages 3/4 from shadow
     me7_kwp_shadow.py COM8 out.bin --shadow 0x383DA8 --slots 21
 """
 import sys
@@ -58,6 +69,8 @@ PAGE_RECORD = (None, 0, 1, 2, 3, 4, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10,
                11, 11, 11, 12, 13, 14, 15, 16, 17, 18, 19, 19, 19, 20, 20)
 # Pages sharing a record whose slot tracks only the record's first page.
 NOT_TRACKED = frozenset({18, 19, 28, 29})
+CHIP_MIRROR = 0x600000
+ERASED_PAGE = bytes([0xFF]) * 16
 
 
 class Link:
@@ -191,10 +204,13 @@ def main() -> int:
     ap.add_argument("--shadow", type=lambda s: int(s, 0), default=0x383DA8,
                     help="RAM shadow address (default 0x%(default)X, build-specific)")
     ap.add_argument("--slots", type=int, default=21, help="number of 16-byte record slots")
+    ap.add_argument("--mirror", action="store_true",
+                    help="also read the chip mirror at 0x600000 for a complete image")
     args = ap.parse_args()
 
     link = Link(args.port)
     raw = bytearray()
+    chip: dict[int, bytes] = {}
     try:
         link.wake()
         link.note("ECU identification (1A 9B)")
@@ -214,6 +230,16 @@ def main() -> int:
             if d[0] != 0x63 or len(d) < 17:
                 raise RuntimeError(f"unexpected read reply for slot {rec}")
             raw += d[1:17]
+        if args.mirror:
+            link.note(f"reading the chip mirror at 0x{CHIP_MIRROR:06X}")
+            for page in range(32):
+                a = CHIP_MIRROR + page * 16
+                d = link.request(bytes([0x23, (a >> 16) & 0xFF, (a >> 8) & 0xFF, a & 0xFF, 16]),
+                                 must_succeed=False)
+                if d[0] == 0x63 and len(d) >= 17:
+                    chip[page] = bytes(d[1:17])
+                else:
+                    link.note(f"     page {page} withheld by the ECU")
     finally:
         try:
             link.note("stop communication (82)")
@@ -225,11 +251,34 @@ def main() -> int:
 
     args.out.with_name(args.out.name + ".raw").write_bytes(raw)
     img, have = rebuild(bytes(raw))
+    worst = 0
+    if args.mirror:
+        shadow_img = img
+        merged = bytearray(ERASED_PAGE * 32)
+        from_shadow, conflicts = [], []
+        for page in range(32):
+            sp = shadow_img[page * 16:(page + 1) * 16]
+            if page in chip:
+                merged[page * 16:(page + 1) * 16] = chip[page]
+                if page in have and sp != chip[page]:
+                    conflicts.append(page)
+            elif page in have:
+                merged[page * 16:(page + 1) * 16] = sp
+                from_shadow.append(page)
+        img = bytes(merged)
+        have = sorted(set(chip) | set(from_shadow))
+        print(f"\nchip pages: {len(chip)}; filled from shadow: {from_shadow or 'none'}")
+        if conflicts:
+            worst = 1
+            print(f"!! chip and shadow disagree on pages {conflicts}; the chip copy was kept."
+                  " Re-read before trusting this image.")
+        else:
+            print("chip and shadow agree on every page both returned")
     args.out.write_bytes(img)
     missing = sorted(set(range(32)) - set(have))
-    print(f"\nwrote {args.out} ({len(have)} pages; not shadowed, written as FF: {missing})")
+    print(f"wrote {args.out} ({len(have)} pages; missing, written as FF: {missing or 'none'})")
     print(f"validate with: python me7_95040.py -f {args.out}")
-    return 0
+    return worst
 
 
 if __name__ == "__main__":

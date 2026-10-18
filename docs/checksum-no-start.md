@@ -130,7 +130,7 @@ carries the flashing tool's stamp. When bit 7 of that byte is set, the ECU
 runs the block, which begins by loading the magic value `0xA5F0`. The ECU
 then treats itself as not properly programmed.
 
-**Live read: the bit is set on this ECU today** (section 7).
+**Live reads:** the bit was set on this ECU on the morning of 2026-10-18, and was cleared once a programming session completed (section 7).
 
 **Inferred.** The firmware hasn't been traced far enough to show which routine
 sets page 30 byte 8 bit 7, or how it relates to the P0601 bytes. Only two
@@ -187,44 +187,64 @@ day, v0.08 was run through **ME7Sum twice**, producing `Fixed.bin` and
   signature
 - **0 errors** on all 72 checks, P1681 patch included.
 
-Which image was flashed last is **unknown**. The live EEPROM read below can't
-answer that, because it reads the EEPROM, not the flash. A flash read would:
-current NefMoto connects to this ECU, since it retries slow init at `0x11`.
+**What's flashed today is `Fixed.bin`, byte for byte.** On 2026-10-18 the
+ECU's flash was read in normal mode with NefMoto (v1.9.8.4, which connects at
+`0x11`). Every block was verified against the ECU's own checksum. The result
+is byte-identical to `Fixed.bin`: v0.08 calibration, ME7Sum key `9f618324…`,
+the P1681 patch and the `NOREAD` marker, with 0 ME7Sum errors. The car has
+been running the ME7Sum-repaired v0.08.
 
-## 7. The ECU's live state (2026-10-18)
+## 7. The ECU's live state, and the flag clearing (2026-10-18)
 
-The EEPROM contents were read from the running ECU's RAM shadow over KWP2000
-with [`tools/me7_kwp_shadow.py`](../tools/me7_kwp_shadow.py), without opening
-the ECU. The rebuilt page image validates cleanly. Compared with the 2013
-dump:
+The EEPROM was read several times during the day without opening the ECU,
+using [`tools/me7_kwp_shadow.py`](../tools/me7_kwp_shadow.py). Reads came from
+the RAM shadow and, later, from the chip itself through the ECU's mirror at
+`0x600000` (`--mirror`). NefMoto also read page 30 twice. The programming
+record on page 30 changed during the session:
 
-| What | 2013 dump | Live (2026) |
-|---|---|---|
-| P0601 bytes, `0x1C` / `0x2C` | `00` / `00` | `00` / `00` (clear) |
-| **Page 30 byte 8** ("programming not complete") | `00` | **`80`: bit 7 set** |
-| Page 30 bytes 9–10 | `05 0d` | `1d 29` |
-| Immobiliser flag, `0x12` / `0x22` | `01` / `01` | `02` / `02` (off; see [immo-off.md](immo-off.md)) |
+| Time | Source | Page 30 bytes 8–10 | Bit 7 ("programming not complete") |
+|---|---|---|---|
+| 2013 | `bporg95040.bin` | `00 05 0d` | clear |
+| 00:44 | RAM shadow | `80 1d 29` | **set** |
+| 01:14:18 | NefMoto, page 30 via `0x6001E0` | `80 1d 29` | **set** |
+| 01:15:11 | NefMoto enters a **programming session** for a flash read; it fails: *"No sector finished, so the programming flag stays set. Use Clear DTCs."* | | |
+| 01:15:35–01:20 | NefMoto's second programming-session flash read **completes every sector** | | |
+| ~01:30 | chip mirror | `00 20 2f` | **clear** |
+| ~01:40 | RAM shadow | `00 20 2f` | **clear** |
 
-This **proves** the flag that the P1681 check reads is **set on this ECU right
-now**. Unpatched firmware would run the "programming not complete" block. The
-P1681 patch is what keeps the car running, not a clean flag. Two consequences:
+The two reads at ~01:30 and ~01:40 agree on all 25 pages they have in common,
+so RAM and chip were in step. The change between 00:44 and 01:30 was the ECU's
+state changing, not a difference between sources.
 
-- **Don't flash an unpatched image** (for example stock, v0.01–v0.04 or
-  v0.02.x) onto this ECU without dealing with that flag first. The ECU would act
-  on it.
-- Clearing it would mean writing pages 30/31, which are a mirrored pair
-  (page 31 borrows page 30's checksum index). **This hasn't been tried.** Nothing
-  here shows that bit 7 is the only thing that matters, and bytes 9–10 changed
-  too.
+**What this shows (proven).** The bit the P1681 check reads was **set** on
+this ECU this morning, presumably since the 2018 trouble, and it is **clear
+now**. At the same time, bytes 9 and 10 rose from `1d 29` to `20 2f`.
 
-Which routine set the flag, and when, still isn't known (see section 4). The
-P0601 bytes are clear, so if that path stored an error, it has been cleared
-since.
+**Why (inferred, but strongly supported).** NefMoto's own message ties this
+flag to programming sessions: a session that finishes no sector leaves it
+set. The only programming session that completed in between was NefMoto's
+full flash read. The most likely reading is that **starting a programming
+session sets the flag, and completing one clears it**, and that bytes 9–10
+are counters the ECU bumps along the way. NefMoto's log shows no explicit DTC
+clear.
 
-Pages 5–7, 17 and 23–27 also changed. Pages 23–27 went from all zeros to
-repeating 6-byte entries. What those pages hold is covered, or flagged as
-unknown, in [95040-format.md](95040-format.md). They play no known part in
-this story.
+Over the same period, pages 23–27 (populated at 00:44) returned to all zeros,
+pages 7/8 bytes 2–4 returned to their 2013 value `01 54 4f`, and page 17
+changed. Nothing in the log shows what reset pages 23–27, so their meaning
+stays as given in [95040-format.md](95040-format.md).
+
+Other live values: the P0601 bytes (`0x1C`/`0x2C`) are `00`, and the
+immobiliser flag is `02 02`, off (see [immo-off.md](immo-off.md)).
+
+**Consequences:**
+
+- With the flag clear, an unpatched image would no longer trip the P1681 check
+  *on this flag's account*. The patch still protects against the next
+  **interrupted** programming session, which would set the flag again. Keep it
+  unless there's a reason to remove it, and if you do remove it, read page 30
+  first (`me7_kwp_shadow.py --mirror`) and make sure bit 7 is clear.
+- Writing pages 30/31 directly to clear the flag is **not needed**, and was
+  never tried. Completing a programming session did it.
 
 ## 8. Recovery options, from cleanest to bluntest
 

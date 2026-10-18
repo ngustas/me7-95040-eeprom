@@ -57,9 +57,10 @@ will catch a bad transfer.
 **Settled by a live read (2026-10-18): the immobiliser is OFF in this ECU's
 EEPROM.**
 
-The EEPROM contents were read from the running ECU's RAM shadow over
-KWP2000 with [`tools/me7_kwp_shadow.py`](../tools/me7_kwp_shadow.py), without
-opening the ECU. The rebuilt page image validates cleanly, and:
+The EEPROM was read from the running ECU over KWP2000 with
+[`tools/me7_kwp_shadow.py`](../tools/me7_kwp_shadow.py), without opening the
+ECU. The reads covered both the RAM shadow and the chip itself (`--mirror`),
+and the resulting full 32-page image validates cleanly:
 
 ```
          0x12  0x1E/1F     0x22  0x2E/2F
@@ -72,7 +73,8 @@ The immo-off was therefore done in the EEPROM, at some point after the 2013
 dump. That 2013 dump is still the only *file* of this ECU's EEPROM: the
 tuning files and machine backups were searched, every 512-byte file was
 matched against this ECU's VIN and immobiliser ID, and only copies of it
-turned up. So the modified image was never saved. One clue to when it
+turned up. So the modified image was never saved; the 2026 live read is now
+the current reference. One clue to when it
 happened: on 2020-12-21, this ECU's 2013 dump, the virgin template, the
 "ME7.1.1 OFF" image and `2392.bin` were gathered together on one machine.
 
@@ -81,8 +83,9 @@ Other points:
 - None of the 15 distinct flash images on file contains a **code change aimed
   at the immobiliser**. The only code patch is the one-byte P1681 fix (see
   [checksum-no-start.md](checksum-no-start.md)).
-- The live read covers pages 1–17, 20–27 and 30–31. Page 0, 18, 19, 28 and 29
-  aren't held in RAM, so a full chip image still needs a bootmode read.
+- The full image comes from the chip mirror at `0x600000` for 30 pages. The
+  ECU withholds pages 3 and 4 (the SKC and cluster code) there, so those two
+  come from the RAM shadow. See [95040-format.md](95040-format.md).
 
 On a bench the immobiliser only blocks the engine from starting. Diagnostics,
 flashing and bootmode access work either way, so the remote-bench setup

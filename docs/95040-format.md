@@ -99,6 +99,29 @@ background task keeps the page in sync with RAM.
   (`0x58`) placeholders. One "virginised" ECU dump had VIN *and* immobiliser
   ID reset to `X`s while keeping its part number.
 
+## Reading the EEPROM from a running ECU
+
+There's no need to open the ECU. Over KWP2000 (slow init `0x11` on this ECU),
+a **development session** (`10 86`) serves `ReadMemoryByAddress` (`23`) from
+two places. On the reference ECU it does so even though the security login is
+refused (`7F 27 10`):
+
+| Source | Address | What comes back |
+|---|---|---|
+| RAM shadow | `0x383DA8 + record*16` | Pages held in RAM. Not 0, 18, 19, 28 or 29 |
+| **Chip mirror** | **`0x600000 + EEPROM offset`** | The chip itself (each read is answered `7F 23 78`, "response pending", first). Every page **except 3 and 4** |
+
+The ECU **withholds pages 3 and 4**, which hold the SKC and cluster code, from
+the chip mirror with `7F 23 12`. The same bytes are available in the RAM
+shadow, so the two sources together give all 32 pages.
+`tools/me7_kwp_shadow.py --mirror` does exactly that in one session, and
+cross-checks every page both sources return.
+
+Pages 23–27 held repeating 6-byte entries on the morning of 2026-10-18 and
+were all zeros after a completed programming session the same night. That's
+consistent with fault memory, but not confirmed. See
+[checksum-no-start.md](checksum-no-start.md), section 7.
+
 ## Read-integrity canary
 
 Page 9 was byte-identical in every dump examined, across three ECU families
