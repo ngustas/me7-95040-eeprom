@@ -37,6 +37,7 @@ mean the donor car was an allroad: late C5 A6 2.7Ts used it as well.
 | [`docs/immo-off.md`](docs/immo-off.md) | Turning the immobiliser off in the 95040, with sources, a worked example and this ECU's status |
 | [`FIRMWARE_FINDINGS.md`](FIRMWARE_FINDINGS.md) | Ghidra disassembly of the 1037367582 firmware: EEPROM driver, page table, RAM shadow, per-page owners |
 | [`docs/prior-art-tools.md`](docs/prior-art-tools.md) | What 95040tool 0.1, ME7EEPROM 1.40 and me7_95040 1.31 actually do |
+| [`docs/bench-harness.md`](docs/bench-harness.md) | **Wiring**: 121-pin connector pinout for this ECU, the minimum bench circuit, boot-mode tap, pre-power-up checks |
 | [`docs/remote-bench.md`](docs/remote-bench.md) | How to set up the ECU for remote bench access |
 | [`ghidra_scripts/`](ghidra_scripts/) | The Ghidra (Java) scripts used for the firmware analysis |
 

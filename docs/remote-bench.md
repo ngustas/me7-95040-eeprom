@@ -47,14 +47,18 @@ with a relay.
 
 ## Harness and relays
 
+The wiring itself — connector pinout, the minimum bench circuit, the boot-mode
+tap and the pre-power-up checks — is in
+[bench-harness.md](bench-harness.md). Summary of the relay channels:
+
 Use **normally-open** relays throughout. If the controller dies, the ECU then
 ends up powered off and out of bootmode.
 
 | Channel | Switches | Notes |
 |---|---|---|
-| 1 | Terminal 30 (constant 12 V) | Current-limited bench PSU (~2 A) plus a fuse |
-| 2 | Terminal 15 (ignition) | Kept separate from 30, so the key can be cycled without cutting power |
-| 3 | Boot pin | Pin 24 on ME7 per the NefMoto docs. Confirm the polarity and series resistor before wiring |
+| 1 | Pin 62, terminal 30 (constant 12 V) | Current-limited bench PSU (~2 A) plus a 3 A fuse |
+| 2 | Pin 3, terminal 15 (ignition) | Kept separate from 30, so the key can be cycled without cutting power |
+| 3 | Boot pin, through 1 kΩ to ground | **Pin 24 of the flash chip**, inside the opened ECU — not a connector pin. It is a data line, so the relay must open again 2–3 s after power-up |
 | 4 | K-line cable select | Switches between FTDI/CH340/HEX cables |
 
 Drive the relays from a **USB relay board on the Windows box itself**, so the
