@@ -78,7 +78,7 @@ ends up powered off and out of bootmode.
 | Channel | Switches | Notes |
 |---|---|---|
 | 1 | Pin 62, terminal 30 (constant 12 V) | Current-limited bench PSU (~2 A) plus a 3 A fuse |
-| 2 | Pin 3, terminal 15 (ignition) | Kept separate from 30, so the key can be cycled without cutting power |
+| 2 | Pins 3 + 21, terminal 15 (ignition) | Kept separate from 30, so the key can be cycled without cutting power. **Pin 21 must have +12 V or the ECU won't boot** |
 | 3 | Boot pin, through 1 kΩ to ground | **Pin 24 of the flash chip**, inside the opened ECU — not a connector pin. It is a data line, so the relay must open again 2–3 s after power-up |
 | 4 | K-line cable select | Switches between FTDI/CH340/HEX cables |
 

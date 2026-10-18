@@ -36,9 +36,10 @@ populated; 119–121 are empty.
 | Ground (terminal 31) | **1** and **2** | BRN, BRN → G12 | Confirmed, two sources |
 | Constant +12 V (terminal 30) | **62** | RED, straight off battery + | Confirmed, two sources |
 | Switched +12 V ("ignition") | **3** | BLK/BLU, 20 A fuse | See [the pin 3 question](#the-pin-3-question) |
+| +12 V supply | **21** | — | **Required: confirmed on the bench**, the ECU does not boot without it. Wired with pin 3 (see [pin 21](#pin-21-is-required)) |
 | K-line | **43** | GRN/BLK, spliced to GRN/RED at the DLC → OBD-II pin 7 | Confirmed, three sources |
 
-That is the whole harness. Four wires plus the K-line cable.
+That is the whole harness. Five wires plus the K-line cable.
 
 ### Also worth knowing
 
@@ -84,12 +85,17 @@ ECU, then apply 12 V to 3 and 62 at the same moment. The C167 samples the boot
 pin at reset, so a single-rail power-up enters boot mode just as well; the
 only thing lost is the ability to cycle the "key" without dropping terminal 30.
 
+### Pin 21 is required
+
+On the reference bench the ECU **would not boot without +12 V on pin 21**. That matches transpondery.com (VCC on 3/21/62) and NefMoto's own bench prompt ("use the same switched +12 V as pins 3, 21, and 62"). It contradicts the rusEFI thread, which called 21 unused on the 2.7T. Feed it from the same relay as pin 3.
+
 ## Minimum bench circuit
 
 ```
   PSU +13.5 V ──┬── 3 A fast-blow ──┬── [relay 1, NO] ── ECU pin 62   (term 30)
                 │                   │
-                │                   └── [relay 2, NO] ── ECU pin 3    (term 15)
+                │                   └── [relay 2, NO] ──┬── ECU pin 3    (term 15)
+                │                                       └── ECU pin 21   (required)
                 │
   PSU −  ───────┼───────────────────┬── ECU pin 1
                 │                   ├── ECU pin 2
@@ -138,7 +144,7 @@ boot mode.
 | Channel | Switches | Notes |
 |---|---|---|
 | 1 | Pin 62 (terminal 30) | Through the 3 A fuse |
-| 2 | Pin 3 (terminal 15) | Separate, so the "key" can be cycled without dropping 30 |
+| 2 | Pins 3 + 21 (terminal 15) | Separate, so the "key" can be cycled without dropping 30. Pin 21 is required for the ECU to boot |
 | 3 | Boot pin tap, through 1 kΩ to ground | Must open again a few seconds after power-up |
 | 4 | K-line cable select | Between the FTDI/CH340 and HEX-USB+CAN cables |
 
@@ -264,7 +270,7 @@ With the PSU off and nothing connected:
 
 1. Continuity from the harness ground lead to pins 1 and 2, and to OBD-II
    pins 4 and 5. Should be a dead short through the star point.
-2. Continuity from the 12 V lead to pins 3 and 62 **only**. Probe pins 15, 21
+2. Continuity from the 12 V leads to pins 3, 21 and 62 **only**. Probe pins 15
    and 121 and confirm they are open.
 3. Resistance between the 12 V lead and ground: open circuit. A reading of a
    few ohms means a crimp has shorted in the connector shell.
@@ -295,10 +301,11 @@ bench machine — see [remote-bench.md](remote-bench.md).
   every boot-mode quotation above.
 - **transpondery.com**, VAG ME7.x basic connection — GND 1, VCC 3/21/62,
   K-line 43, CAN-H 60, CAN-L 58 for the 121-pin ME7.1/7.1.1/7.5. Corroborates
-  the K-line and CAN pins.
+  the K-line and CAN pins, and the pin 21 supply (confirmed on the bench).
 - **rusEFI forum, "Hellen 121 ME7 for VAG PnP ECU"** (`rusefi.com/forum`,
   topic 1931). A factory-diagram read-through by a contributor gives the 2.7T
-  as 20 A into pin 3 with pins 21, 23 and 121 unused, against a board-design
+  as 20 A into pin 3 with pins 21, 23 and 121 unused (pin 21 being unused is
+  **wrong for this ECU**: it won't boot without it), against a board-design
   proposal in the same thread that wanted 121 as the main 12 V input. The
   thread never resolves it; the C5 diagram above does, for this car.
 
