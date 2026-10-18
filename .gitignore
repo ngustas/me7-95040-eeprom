@@ -1,0 +1,18 @@
+# Never commit ECU images: EEPROM dumps hold the VIN, immobiliser ID and SKC;
+# flash images are Bosch firmware.
+*.bin
+*.BIN
+*.ori
+*.eep
+*.hex
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Ghidra project files
+*.gpr
+*.rep/
+*.lock
+*.lock~
