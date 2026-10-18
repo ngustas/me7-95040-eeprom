@@ -34,6 +34,7 @@ mean the donor car was an allroad: late C5 A6 2.7Ts used it as well.
 | [`tools/pyc27.py`](tools/pyc27.py) | Read and disassemble Python 2.7 `.pyc` files from Python 3. This is how 95040tool's logic was recovered |
 | [`docs/95040-format.md`](docs/95040-format.md) | **The format reference**: checksum, page lists, full 32-page map, field offsets |
 | [`docs/checksum-no-start.md`](docs/checksum-no-start.md) | **Case study**: how a tune with an incomplete checksum caused a no-start after a few key cycles, and the P1681 patch that fixed it |
+| [`docs/immo-off.md`](docs/immo-off.md) | Turning the immobiliser off in the 95040, with sources, a worked example and this ECU's status |
 | [`FIRMWARE_FINDINGS.md`](FIRMWARE_FINDINGS.md) | Ghidra disassembly of the 1037367582 firmware: EEPROM driver, page table, RAM shadow, per-page owners |
 | [`docs/prior-art-tools.md`](docs/prior-art-tools.md) | What 95040tool 0.1, ME7EEPROM 1.40 and me7_95040 1.31 actually do |
 | [`docs/remote-bench.md`](docs/remote-bench.md) | How to set up the ECU for remote bench access |

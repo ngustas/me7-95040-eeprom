@@ -84,9 +84,10 @@ background task keeps the page in sync with RAM.
 
 ### Notes on specific fields
 
-- **Immobiliser flag.** If both 1[2] and 2[2] are `0x01`, the immobiliser is on.
-  On the reference ECU it reads ON. Its immo-off lives in the **flash** tune,
-  not the EEPROM, so EEPROM writes do not disturb it.
+- **Immobiliser flag.** 1[2] and 2[2] are both `0x01` when the immobiliser
+  is on and `0x02` when it is off. The only EEPROM image of the reference ECU
+  on file (2013) reads ON. See [immo-off.md](immo-off.md) for the procedure and
+  for what is and isn't known about this ECU's immobiliser state.
 - **VIN.** 17 characters split 5 + 12 across pages 11 and 13. Byte 13[12] is
   *not* part of the VIN: it is the first character of the 14-character
   immobiliser ID (format `AUZ7Z0xxxxxxxx`).
