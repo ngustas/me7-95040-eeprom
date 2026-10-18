@@ -207,8 +207,8 @@ record on page 30 changed during the session:
 | 2013 | `bporg95040.bin` | `00 05 0d` | clear |
 | 00:44 | RAM shadow | `80 1d 29` | **set** |
 | 01:14:18 | NefMoto, page 30 via `0x6001E0` | `80 1d 29` | **set** |
-| 01:15:11 | NefMoto enters a **programming session** for a flash read; it fails: *"No sector finished, so the programming flag stays set. Use Clear DTCs."* | | |
-| 01:15:35–01:20 | NefMoto's second programming-session flash read **completes every sector** | | |
+| 01:15:11 | NefMoto enters a **programming session** for a flash read with a **too-small memory layout** selected (*"The ECU may have a larger flash chip than the selected layout (try 29F800)"*). It fails: *"No sector finished, so the programming flag stays set. Use Clear DTCs."* | | |
+| 01:15:35–01:20 | NefMoto's second programming-session flash read, with the right layout, **completes every sector** | | |
 | ~01:30 | chip mirror | `00 20 2f` | **clear** |
 | ~01:40 | RAM shadow | `00 20 2f` | **clear** |
 
@@ -217,16 +217,35 @@ so RAM and chip were in step. The change between 00:44 and 01:30 was the ECU's
 state changing, not a difference between sources.
 
 **What this shows (proven).** The bit the P1681 check reads was **set** on
-this ECU this morning, presumably since the 2018 trouble, and it is **clear
-now**. At the same time, bytes 9 and 10 rose from `1d 29` to `20 2f`.
+this ECU this morning, and it is **clear now**. At the same time, bytes 9 and
+10 rose from `1d 29` to `20 2f`.
 
-**Why (inferred, but strongly supported).** NefMoto's own message ties this
-flag to programming sessions: a session that finishes no sector leaves it
-set. The only programming session that completed in between was NefMoto's
-full flash read. The most likely reading is that **starting a programming
-session sets the flag, and completing one clears it**, and that bytes 9–10
-are counters the ECU bumps along the way. NefMoto's log shows no explicit DTC
-clear.
+**A read with the wrong chip type keeps the flag set (demonstrated).** The
+01:15:11 attempt is a live example. A flash *read*, with nothing written,
+entered a programming session with a memory layout too small for this ECU's
+29F800 chip. It failed before finishing a sector, and NefMoto reported that
+the programming flag stays set. The next read, with the right layout,
+completed every sector, and the flag was then clear. NefMoto's message, and
+that sequence, support the reading that **starting a programming session sets
+the flag and completing one clears it**. The only session that completed in
+between was that full read, and NefMoto's log shows no explicit DTC clear.
+
+**When the flag was first set is not known.** It was already set at 00:26,
+before tonight's only programming session, and it was clear in the 2013
+dump. No log of the event that set it survives; the only older NefMoto log
+(2026-10-12) is a launch with no connection. Two candidates fit:
+
+- **A past read attempt with the wrong chip type selected**, the same
+  mechanism as above. This matches the owner's recollection.
+- **The 2018 flashing** that led to the P1681 patch.
+
+Nothing on file tells them apart. Either way, the P1681 patch was bypassing a
+flag that a failed *read* alone can set, not necessarily one left by a bad
+flash.
+
+**Bytes 9–10 aren't decoded.** They rose by 3 and 6 tonight. In that time
+NefMoto logged 1 programming session, 2 read attempts and 19 block reads, and
+none of those maps to the increase one-to-one.
 
 Over the same period, pages 23–27 (populated at 00:44) returned to all zeros,
 pages 7/8 bytes 2–4 returned to their 2013 value `01 54 4f`, and page 17
@@ -245,6 +264,10 @@ immobiliser flag is `02 02`, off (see [immo-off.md](immo-off.md)).
   first (`me7_kwp_shadow.py --mirror`) and make sure bit 7 is clear.
 - Writing pages 30/31 directly to clear the flag is **not needed**, and was
   never tried. Completing a programming session did it.
+- **Select the right memory layout (29F800 for this ECU) before any flash
+  read or write.** A programming-session read that fails part-way sets the
+  flag. If one does, complete a full read with the correct layout, then check
+  page 30 with `me7_kwp_shadow.py --mirror`.
 
 ## 8. Recovery options, from cleanest to bluntest
 
