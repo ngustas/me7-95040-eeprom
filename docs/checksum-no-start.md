@@ -220,15 +220,52 @@ state changing, not a difference between sources.
 this ECU this morning, and it is **clear now**. At the same time, bytes 9 and
 10 rose from `1d 29` to `20 2f`.
 
-**A read with the wrong chip type keeps the flag set (demonstrated).** The
-01:15:11 attempt is a live example. A flash *read*, with nothing written,
-entered a programming session with a memory layout too small for this ECU's
-29F800 chip. It failed before finishing a sector, and NefMoto reported that
-the programming flag stays set. The next read, with the right layout,
-completed every sector, and the flag was then clear. NefMoto's message, and
-that sequence, support the reading that **starting a programming session sets
-the flag and completing one clears it**. The only session that completed in
-between was that full read, and NefMoto's log shows no explicit DTC clear.
+**NefMoto calls this flag P0602.** Its bootmode EEPROM tab names bit 7 of
+`0x1E8`/`0x1F8` "P0602", and its log calls it "the programming flag". It's the
+same bit the P1681 check at `0x86C0B6` reads.
+
+### The rule, tested (02:08–02:16)
+
+A controlled sequence of **reads only** (NefMoto, KWP2000), with page 30 read
+through the mirror between steps:
+
+| Step | Page 30 bytes 8–10 | Bit 7 |
+|---|---|---|
+| Baseline | `00 20 2f` | clear |
+| Full Read Flash with a **29F200** layout (warned, continued, completed: first 256 KB) | | |
+| Full Read Flash with a **29F400** layout (mirror check failed, continued, completed: first 512 KB) | | |
+| ECU reset, page 30 | `80 23 2f` | **set** |
+| Full Read Flash with **29F800BB**, 19 sectors (image identical to `Fixed.bin`) | | |
+| ECU reset, page 30 | `00 24 35` | **clear** |
+
+**Proven:**
+
+- **A programming-session read with the wrong (too-small) layout sets P0602,
+  even when the read completes.** Here, with nothing written, two such reads
+  ran without error and the flag was set afterwards.
+- **A full read with the correct 29F800BB layout, followed by an ECU reset,
+  clears it.** Observed twice: 01:15–01:20 → ~01:30, and 02:13–02:15 → 02:16.
+
+So a stuck P0602 needs **no EEPROM write and no Clear DTCs**: a full read with
+the right layout, then a reset, clears it.
+
+**Behaviour after a programming session.** Once a programming session has
+been used, the ECU refuses further work until it's reset. `StartDiagnosticSession`
+is answered "sub function not supported", requests then fail to send, and
+`StopCommunication` returns `ServiceNotSupported`. A fresh connection, starting
+with KW1281 at `0x01` and then KWP2000 at `0x11`, works normally again. That's
+why page 30 could only be read **after** a reset.
+
+**Not distinguished by these tests:**
+
+- **Whether the reset itself is needed for the clear**, or merely for reading
+  it. The flag was never observable between the end of the read and the reset.
+- **Coverage or checksum validation.** After each block of a 29F800BB read,
+  NefMoto asks the ECU to verify that sector's checksum (19 checks). The
+  29F200/29F400 reads made **none**: NefMoto only verifies reads on a
+  bottom-boot layout. So "the whole chip was covered" and "the ECU validated the
+  whole chip" moved together. A full read with the uniform `29F800` layout
+  (1 MB, zero checks) would separate them.
 
 **When the flag was first set is not known.** It was already set at 00:26,
 before tonight's only programming session, and it was clear in the 2013
@@ -243,9 +280,10 @@ Nothing on file tells them apart. Either way, the P1681 patch was bypassing a
 flag that a failed *read* alone can set, not necessarily one left by a bad
 flash.
 
-**Bytes 9–10 aren't decoded.** They rose by 3 and 6 tonight. In that time
-NefMoto logged 1 programming session, 2 read attempts and 19 block reads, and
-none of those maps to the increase one-to-one.
+**Bytes 9–10 aren't decoded.** Byte 9 went `1d → 20 → 23 → 24` and byte 10
+`29 → 2f → 2f → 35` across the night. Byte 10 rose by exactly **6 for each full
+29F800BB read** (twice) and didn't move for the partial reads. That's a pattern,
+not a decode.
 
 Over the same period, pages 23–27 (populated at 00:44) returned to all zeros,
 pages 7/8 bytes 2–4 returned to their 2013 value `01 54 4f`, and page 17
@@ -263,11 +301,12 @@ immobiliser flag is `02 02`, off (see [immo-off.md](immo-off.md)).
   unless there's a reason to remove it, and if you do remove it, read page 30
   first (`me7_kwp_shadow.py --mirror`) and make sure bit 7 is clear.
 - Writing pages 30/31 directly to clear the flag is **not needed**, and was
-  never tried. Completing a programming session did it.
-- **Select the right memory layout (29F800 for this ECU) before any flash
-  read or write.** A programming-session read that fails part-way sets the
-  flag. If one does, complete a full read with the correct layout, then check
-  page 30 with `me7_kwp_shadow.py --mirror`.
+  never tried. A full correct-layout read and a reset did it.
+- **Select the right memory layout (29F800BB for this ECU) before any flash
+  read or write.** Any programming-session read with a wrong layout sets the
+  flag, even one that completes. If that happens: do a full 29F800BB read, reset
+  the ECU, then confirm page 30 with `me7_kwp_shadow.py --mirror` or NefMoto's
+  **Read EEPROM Mirror**.
 
 ## 8. Recovery options, from cleanest to bluntest
 
