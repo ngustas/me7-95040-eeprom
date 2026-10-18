@@ -91,13 +91,63 @@ calibration as v0.02.1**. It differs from the clean v0.02.1 export in only
   about 1/23 of it, but it doesn't match any partial or truncated byte or
   word sum over those ranges. Exactly how it was miscalculated **can't be
   reproduced**.
-- The WinOLS export of v0.02.1 is correct. So the bad value came from
-  whatever wrote the image to the car, not from the saved file. *Which tool
-  that was is unknown.*
+### What the files prove
 
-**Inferred:** this is the "incomplete checksum calculation" the car was
-carrying when the trouble showed. The readout and the v0.05 "fix for
-programming not complete error" are from the same day.
+- **The readout is a raw read of the car, not a merge.** Apart from those
+  6 bytes it matches v0.02.1 exactly: calibration, **RSA signature**,
+  multipoint checksum table and program checksum. Every WinOLS save on file
+  has a correct main checksum, so a WinOLS merge would have fixed it; a raw
+  read keeps whatever was flashed.
+- **The cat edit is what needed the main checksum.** v0.02 → v0.02.1 ("numb
+  cats") changes just **4 calibration bytes**, all inside MD5/main-checksum
+  range 3: `0x8188F1–F3` (`9a fd fd` → `ff ff ff`) and `0x81A2D9`
+  (`46` → `50`).
+- **The bad value was inside the image that was flashed.** The readout's
+  program-area checksums (RSA signature, program checksum) are v0.02.1's, so
+  the program area was written; this wasn't a data-only write that left an
+  old checksum behind. The wrong main checksum (`0xAA46E`) is in the **same
+  64 KB sector, `0x8A0000`, as the correct RSA signature** (`0xA9C28`), and
+  that sector is the only one where the car differs from WinOLS's saved
+  v0.02.1. A sector is erased and programmed as a unit, so the wrong value
+  went to the ECU in the flashed image. Neither the ECU nor the read
+  introduced it.
+- **WinOLS's saved v0.02.1 has the correct main checksum**
+  (`0x00A67C6B`). The error therefore came from the path between that file and
+  the ECU: either a different export was flashed, or the flashing tool
+  changed the value.
+
+### Reconstructed timeline (owner's recollection plus inference)
+
+The owner recalls that v0.02 stayed on the car until 2018, that the later
+versions were written but not flashed, that the cat/O2 edits were what
+triggered the trouble, and that the car went on a test drive and home after
+the new tune was loaded. It was flashed with the **VAGME7 Flasher** (a
+parallel-port "Kick" interface tool). The best fit with the files:
+
+| When | What |
+|---|---|
+| 2013-10-20 | v0.02 flashed; it stays on the car (recollection) |
+| 2016-07-06 | v0.02.1, v0.02.2, v0.03, v0.04 saved, not flashed (recollection; file dates) |
+| 2018-05-10 | v0.02.1 flashed **with a bad main checksum** (proven that it reached the ECU; date inferred) → test drive → home → read back as "existing mild tune" (proven read) |
+| 2018-05-10, 23:55 | v0.05: correct checksums, **plus the P1681 patch as a precaution**, because the car wasn't nearby and another failure couldn't be risked (recollection; file proven) |
+| 2018-05-11 to 14 | v0.06–v0.08 with O2/cat changes; WinOLS didn't re-sign RSA; v0.08 repaired with ME7Sum → `Fixed.bin` flashed (proven: it's on the ECU today) |
+
+If v0.02.1 had gone on in 2016 instead, the car would have run for two years
+on a bad main checksum, which doesn't fit the no-start behaviour. That's
+why May 2018 is the better fit.
+
+### Hypothesis: the flasher's own checksum handling
+
+The VAGME7 Flasher (`VAGME7.exe`, dated 2008, installed 2009-01-07) does
+checksum work itself. Its UI text includes "Controlling checksum now…",
+"Flash checksum ok/error" and "Cannot find ECU control numbers", and it
+accepts scrambled files. A flasher-side "checksum fix" using the wrong
+algorithm would explain a self-consistent, wrong main checksum appearing in a
+file that WinOLS had saved correctly. **This can't be verified:** the
+executable is packed and encrypted (empty code sections on disk, one 609 KB
+section at entropy 7.99), so its logic can't be read without unpacking it,
+and it left no logs. A different WinOLS export having been flashed remains
+the other explanation.
 
 ## 4. Why a bad checksum becomes a no-start
 
@@ -154,7 +204,19 @@ the same address and with the same surrounding code.
 
 v0.05 also wrote an ASCII marker, `NOREAD` followed by
 `00 00 00 00 00 00 03 32`, into erased flash at `0x0FFF90`. Every patched
-version carries it. Its purpose is **not known**.
+version carries it, and it's still on the ECU today. Its purpose is **not
+known**. What's established about its origin:
+
+- **It isn't from NefMoto, ME7Sum, ME7EEPROM, me7_95040 or 95040tool.** The
+  string appears in none of their sources or binaries (searched as ASCII and
+  UTF-16).
+- **It isn't part of the community P1681 patch.** `4Z7907551S-disable-P1681.bin`
+  has the one-byte patch but no `NOREAD`. So the marker was added by the
+  owner's own editing or flashing chain when v0.05 was made.
+- **It doesn't block NefMoto.** NefMoto reads this ECU fine, flash included,
+  with the marker present.
+- The VAGME7 Flasher is a candidate, but its executable is packed, so
+  this couldn't be checked (see section 3).
 
 ### The trade-off
 
