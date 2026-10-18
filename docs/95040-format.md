@@ -68,7 +68,7 @@ background task keeps the page in sync with RAM.
 | 11/12 | 0x08 | yes / backup | `[5:10]` **VIN** chars 1–5 | high |
 | 13/14 | 0x09 | yes / backup | `[0:12]` **VIN** chars 6–17; `[12]` first char of **immobiliser ID** | high |
 | 15/16 | 0x0A | yes / backup | `[0:13]` **immobiliser ID** chars 2–14 | high |
-| 17 | 0x0B | no | Immobiliser-area counters `[6]`, `[7]` (saturate at `0x7F`, `0x80` = set) | medium |
+| 17 | 0x0B | no | Immobiliser-area counters `[6]`, `[7]` (saturate at `0x7F`, `0x80` = set). `[2:6]` **changes at every start-up** (see below) | medium |
 | 18/19 | 0x0B | no | Not swept; no application access found. Populated in one dump, probably by a tester | unknown |
 | 20 | 0x0C | yes | **Alternate part-number slot**: 2 bytes + 12 ASCII (used by `8E0909018A`) | high |
 | 21 | 0x0D | yes | `[8:14]` start of a byte array that continues on page 22 | structure |
@@ -116,6 +116,29 @@ the chip mirror with `7F 23 12`. The same bytes are available in the RAM
 shadow, so the two sources together give all 32 pages.
 `tools/me7_kwp_shadow.py --mirror` does exactly that in one session, and
 cross-checks every page both sources return.
+
+**Verified against a bootmode dump.** On the reference ECU a true chip dump
+was taken in bootmode (ME7EEPROM 1.40, `--bootmode 95040 --CSpin P6.3`). It
+matched the `--mirror` image on 31 of 32 pages, **including pages 3 and 4**,
+so filling those from the RAM shadow is sound. The one difference was page 17
+(below), which changes between any two reads.
+
+### Page 17 changes at every start-up
+
+Page 17 bytes 2–5 were different in every read of the reference ECU:
+
+| Read | 17[2:6] |
+|---|---|
+| 2013 dump | `d4 83 44 f8` |
+| 2026-10-18 00:44, RAM shadow | `a6 29 5e 9c` |
+| ~01:30, chip mirror | `a0 88 3d ab` |
+| 01:53, bootmode dump | `f5 85 84 05` |
+
+Several power cycles happened between those reads. Page 17 has no checksum
+and sits in the immobiliser area, and the firmware's immobiliser code reads
+`17[2:6]`. A value the ECU rewrites on each start-up fits an immobiliser
+challenge or rolling code, but that **isn't confirmed**. In practice, **don't
+treat a page 17 difference between two reads as a bad read.**
 
 Pages 23–27 held repeating 6-byte entries on the morning of 2026-10-18 and
 were all zeros after a completed programming session the same night. That's

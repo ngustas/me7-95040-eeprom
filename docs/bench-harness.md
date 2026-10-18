@@ -99,12 +99,19 @@ only thing lost is the ability to cycle the "key" without dropping terminal 30.
              (single star point — one bolt or one bus bar)
 
   K-line cable ── OBD-II pin 7 ───────── ECU pin 43
-                  OBD-II pin 16 ──────── +12 V (only if the cable needs it)
+                  OBD-II pin 16 ──────── PSU +12 V, CONSTANT (before the relays)
 ```
 
 Some KKL cables take their own power from OBD-II pin 16; a genuine FTDI one
 usually runs off USB. Check before wiring it — a cable that back-feeds 12 V
 into a pin 16 you left floating is a confusing fault to chase.
+
+**Feed OBD-II pin 16 from the constant supply, never from a switched ECU
+rail.** The Ross-Tech HEX-USB+CAN's K-line side runs from pin 16. When pin 16
+switched on together with the ECU, the cable's transceiver glitched the K-line
+during the ECU's power-up. In bootmode, that glitch is enough to break the
+connection (see [Bootmode won't answer](#bootmode-wont-answer-the-listen-test)).
+Normal KWP2000 work is unaffected, which is why it went unnoticed.
 
 Wire gauge is uncritical at these currents; 20 AWG is plenty. What matters is
 the connector end.
@@ -215,6 +222,41 @@ be removed before boot mode works, and others specifically must *not* have it
 removed. This is forum-level information, it is not in either wiki, and it has
 **not** been checked against this ECU's board. Inspect before assuming, and
 try boot mode as-is first — if it enters, there is nothing to remove.
+
+### Bootmode won't answer: the listen test
+
+On this bench, bootmode entry worked but the loader seemed silent for a long
+time. A probe is a single `0x00` byte; the C167 bootstrap loader answers it
+with one ID byte (`0xC5` here, "C167 derivative"). That probe got only its
+own echo back, at 57600 and at 9600, with pin 24 measured near 0 V.
+
+Two observations separated "not in bootmode" from "can't talk to the
+loader":
+
+1. **After a clean entry, send the normal KWP2000 wake-up at `0x11`.** If the
+   application answers (`55 EF 8F`), the ECU didn't enter bootmode. Silence,
+   when a normal power-up answers, means the application isn't running, so the
+   CPU is almost certainly in the loader. Re-enter bootmode before the next
+   test, because the wake-up's bytes will have reached the loader.
+2. **Listen *before* power-up.** Open the port first, record every byte while
+   you go through the entry sequence, and only then send the `0x00`. On this
+   bench that showed **8 bytes on the K-line during power-up**
+   (`00`, `e0 00 fc`, `00`, `e0 00 fc`) and no reply to the probe.
+
+The C167 loader auto-bauds on the **first** low pulse it sees after reset,
+sends its ID once, then treats every following byte as loader code. A
+power-up glitch on the K-line therefore uses up that one reply before any tool
+asks for it. Everything after it, including the real `0x00`, is taken as
+upload data, and the loader stays silent.
+
+The glitches came from the cable. Its supply (OBD-II pin 16) was switched
+together with the ECU. With pin 16 on constant +12 V, the same listen test saw
+**no bytes before the probe**, and the loader answered **`C5`**. The ME7EEPROM
+bootmode read (`--bootmode 95040 --CSpin P6.3`) then worked straight away
+over the HEX-USB+CAN.
+
+If a tool reports no bootmode response, run the listen test before suspecting
+the board.
 
 ## Before the first power-up
 
