@@ -32,6 +32,7 @@ mean the donor car was an allroad: late C5 A6 2.7Ts used it as well.
 | [`me7_95040.py`](me7_95040.py) | Validate and decode 95040 images: checksums, backup pages, named fields, side-by-side comparison, round-trip check |
 | [`tools/me7_flash_info.py`](tools/me7_flash_info.py) | Identify an ME7 flash image and dump its EEPROM page attribute table |
 | [`tools/me7_kwp_shadow.py`](tools/me7_kwp_shadow.py) | Read the EEPROM from a running ECU over KWP2000 (K-line, slow init `0x11`), without opening it. Read-only. `--mirror` gives all 32 pages |
+| [`tools/me7_kline_probe.py`](tools/me7_kline_probe.py) | Minimal K-line probes: a 5-baud wake-up (which protocol answers at `0x01`/`0x11`), a single bootstrap-loader probe, and the listen-before-power-up test for bootmode that won't answer |
 | [`tools/pyc27.py`](tools/pyc27.py) | Read and disassemble Python 2.7 `.pyc` files from Python 3. This is how 95040tool's logic was recovered |
 | [`docs/95040-format.md`](docs/95040-format.md) | **The format reference**: checksum, page lists, full 32-page map, field offsets |
 | [`docs/checksum-no-start.md`](docs/checksum-no-start.md) | **Case study**: how a tune with an incomplete checksum caused a no-start after a few key cycles, and the P1681 patch that fixed it |
@@ -44,8 +45,8 @@ mean the donor car was an allroad: late C5 A6 2.7Ts used it as well.
 
 ## Quick start
 
-All the scripts need **Python 3.12+**. Only `me7_kwp_shadow.py` needs
-anything else: `pyserial`. Each script has a
+All the scripts need **Python 3.12+**. Only `me7_kwp_shadow.py` and
+`me7_kline_probe.py` need anything else: `pyserial`. Each script has a
 [PEP 723](https://peps.python.org/pep-0723/) header, so `uv run` works as well.
 
 ```bash
@@ -57,6 +58,8 @@ python me7_95040.py -c a.bin b.bin c.bin         # compare images side by side
 python me7_95040.py --canon dump.bin -o out.bin  # show where a naive writer diverges
 python tools/me7_flash_info.py flash.bin --table # idents + EEPROM page table
 python tools/me7_kwp_shadow.py COM8 live.bin --mirror  # full EEPROM from a running ECU
+python tools/me7_kline_probe.py COM8 wake 0x11         # does the application answer?
+python tools/me7_kline_probe.py COM8 boot-listen       # bootmode that won't answer
 ```
 
 `me7_95040.py` exits with 1 if any page fails its checksum for no known
@@ -110,6 +113,23 @@ reason, so it can be dropped into a test script.
 Still unidentified: what the values on pages 5/6, 7/8, 9/10 and 21–25 *mean*
 (their layout and owning code are known), pages 18/19/23/26, and attribute flag
 bits 2/4/5. These are deliberately left blank in the tool rather than guessed.
+
+## Upstream: NefMoto
+
+This ECU was used to validate NefMoto's bootmode EEPROM support (PR #136) on
+real ME7.1.1 hardware. The results were reported in
+[NefMoto/NefMotoOpenSource#138](https://github.com/NefMoto/NefMotoOpenSource/issues/138).
+
+- **Validated:** bootmode connect, flash detection, the `0xAA` reconnect, the
+  **ME7.1.1 `P6.3`** EEPROM read (byte-identical to an independent ME7EEPROM
+  dump), the on-screen Immo/P0602 helpers, bootmode flash reads and three
+  baud rates.
+- **Bug: checksum table.** NefMoto hard-codes another build's page table, so on
+  this ECU a bad checksum on **page 20** goes unnoticed, and pages **28–29** are
+  exempted even though they carry valid checksums here. Demonstrated in its UI
+  with a control.
+- **Bug: wrong device size.** Reading a 95040 as a `95080` reports "OK" and
+  returns misaligned data.
 
 ## Not included
 

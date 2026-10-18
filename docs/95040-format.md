@@ -80,7 +80,7 @@ background task keeps the page in sync with RAM.
 | 27 | 0x13 | yes | Head of record 0x13 (zeros) | — |
 | 28 | 0x13 | yes | `[2:14]` **VAG part number** (not swept; factory/tester data) | high |
 | 29 | 0x13 | yes | `[0:4]` **variant** (e.g. `0010`) | high |
-| 30/31 | 0x14 | yes / backup | `[2:8]` **tool / workshop stamp** (e.g. `NEFMTO`) | high |
+| 30/31 | 0x14 | yes / backup | **Programming record.** `[2:8]` tool / workshop stamp (e.g. `NEFMTO`); `[8]` bit 7 **programming flag ("P0602")**; `[9:11]` counters; `[12:14]` lockout (see below) | high (`[8]`), observed (`[9:11]`), NefMoto (`[12:14]`) |
 
 ### Notes on specific fields
 
@@ -98,6 +98,26 @@ background task keeps the page in sync with RAM.
 - **Virgin images.** A virgin template fills text fields with `X`
   (`0x58`) placeholders. One "virginised" ECU dump had VIN *and* immobiliser
   ID reset to `X`s while keeping its part number.
+
+## Page 30: the programming record
+
+Page 30 and its backup, page 31, record what has programmed the ECU. `me7_95040.py -f`
+decodes every field below (`tool_stamp`, `p0602_flag`, `prog_counters`, `lockout`).
+
+| Bytes | Field | Evidence |
+|---|---|---|
+| `[2:8]` | Tool stamp, 6 ASCII characters (`NEFMTO` here) | Dumps |
+| `[8]` bit 7 | **Programming flag.** NefMoto calls it "P0602" | **Firmware**: the "programming not complete" check at `0x86C0B6` reads it (`movbz r4,[0xBEF0]; and r4,#0x80`). **Tested**: a programming-session flash read with the wrong layout sets it, even when the read completes; a full read with the correct layout followed by an ECU reset clears it ([checksum-no-start.md](checksum-no-start.md), section 7) |
+| `[9:11]` | Two counters, not decoded | Observed: byte 10 rose by exactly 6 per full 29F800BB read (twice); byte 9 moved on most programming sessions |
+| `[12:14]` | Lockout | From NefMoto's bootmode docs (its **Reset Lockout** clears it), described there as "measured on ME7.5". `00 00` on every ME7.1.1 read here |
+
+NefMoto's ECU identification `0x9C` ("calibration equipment software
+number") reported `0x801D2900`, which is exactly bytes `[8:12]` of page 30 at
+that moment. So the flag byte belongs to the record that the flashing tool
+writes about itself.
+
+Page 31 is a backup page, so its checksum borrows page 30's index. NefMoto's
+**Set/Clear P0602** helper gets this right; it was verified byte for byte.
 
 ## Reading the EEPROM from a running ECU
 

@@ -33,7 +33,8 @@ without anyone on site.
 | Cable | Status |
 |---|---|
 | Dumb KKL / K+DCAN, genuine FTDI or CH340 | **Supported.** Cheap; buy one of each to exercise both code paths |
-| Ross-Tech **HEX-USB** / **HEX-USB+CAN** (legacy) | **Supported** with Ross-Tech VCP drivers and smart mode disabled |
+| Ross-Tech **HEX-USB** / **HEX-USB+CAN** (legacy) | **Supported, and proven on the reference bench:** KWP2000, NefMoto flash reads, and bootmode (connect, flash read, EEPROM read at 38400/57600/124800), with Ross-Tech VCP drivers and smart mode disabled |
+| "VAG CAN PRO" clones | **Not a dumb K-line cable.** One tested here showed no K-line echo at all |
 | Ross-Tech HEX-V2 / HEX-NET | **Not supported.** No dumb K-line pass-through |
 | KII-USB | Avoid (poor pass-through) |
 | Anything labelled "KWP2000" | Avoid. Counterfeit FTDI, blacklisted by the stock driver |
@@ -44,6 +45,26 @@ that.
 
 Don't connect two cables to the K-line at the same time. Select between them
 with a relay.
+
+**Feed the cable's OBD pin 16 from constant 12 V**, not from the ECU's
+switched supply. With pin 16 switched together with the ECU, the HEX-USB+CAN
+glitched the K-line at power-up, and bootmode looked completely dead. See
+[bench-harness.md](bench-harness.md#bootmode-wont-answer-the-listen-test).
+
+**NefMoto and other tools take the cable over in different ways.** NefMoto
+opens the HEX-USB+CAN through FTDI's direct driver. Afterwards, Windows may
+show the cable without its COM port ("Ross-Tech Direct USB Interface", no
+"with VCP"), and COM-port tools can't open it until the cable is unplugged and
+replugged. Only run one NefMoto instance at a time. Two open windows got in
+each other's way on the reference bench.
+
+**Slow-init address.** The reference ECU answers KW1281 at `0x01` and
+KWP2000 only at `0x11`. Current NefMoto handles that automatically; tools
+hard-wired to `0x01` (ME7EEPROM, me7_95040) can't read it over OBD.
+
+**Quick checks from the bench box:** `tools/me7_kline_probe.py COM8 wake 0x11`
+confirms the ECU's application is answering. `tools/me7_kline_probe.py COM8
+boot-listen` diagnoses a bootmode entry that isn't responding.
 
 ## Harness and relays
 

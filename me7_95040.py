@@ -124,6 +124,18 @@ FIELDS: dict[str, list[Span]] = {
     #     individually by 0x88B5BA.
     "adapt_p5p6": [Span(5, 2, 12), Span(6, 2, 4)],
     "flags_p7":   [Span(7, 7, 1)],
+    # Page 30 (and its backup, 31) is the programming record:
+    #   [2:8]  tool stamp (above)
+    #   [8]    bit 7 = programming flag. NefMoto calls it "P0602"; this
+    #          firmware's "programming not complete" check reads it at
+    #          0x86C0B6. A programming session with the wrong flash layout
+    #          sets it; a full correct-layout read plus an ECU reset clears it
+    #          (docs/checksum-no-start.md).
+    #   [9:11] counters, not decoded. Byte 10 rose by exactly 6 per full read.
+    #   [12:14] lockout, per NefMoto's bootmode docs ("measured on ME7.5").
+    "p0602_flag":    [Span(30, 8, 1), Span(31, 8, 1)],
+    "prog_counters": [Span(30, 9, 2)],
+    "lockout":       [Span(30, 12, 2), Span(31, 12, 2)],
 }
 
 # Some images carry the part number on page 20 instead of 28, with the same
@@ -134,7 +146,10 @@ PART_NUMBER_ALT = [Span(20, 2, 12)]
 # not a rule: the firmware writes 22 and 25 (FIRMWARE_FINDINGS.md).
 ALWAYS_ZERO = frozenset({22, 25, 26, 27})
 PRIVATE = frozenset({"vin", "immo_id", "skc"})
-HEX_FIELDS = frozenset({"cluster_code", "immo_flag", "dtc_p0601", "flags_p7"})
+HEX_FIELDS = frozenset({"cluster_code", "immo_flag", "dtc_p0601", "flags_p7",
+                        "p0602_flag", "prog_counters", "lockout"})
+# Shown as raw values even when all zero: zero is meaningful for these.
+ALWAYS_SHOWN = frozenset({"p0602_flag", "prog_counters", "lockout"})
 
 # Row 9 carries the same bytes in every dump examined, across three unrelated
 # ECU families and a virgin image, so it makes a handy read-integrity canary.
@@ -260,13 +275,20 @@ class Image:
             if got is None:
                 continue
             txt, raw = got
-            if not txt.strip(".") or set(raw) in ({0}, {0xFF}):
+            if key in ALWAYS_SHOWN:
+                pass
+            elif not txt.strip(".") or set(raw) in ({0}, {0xFF}):
                 txt = "(unset)"
             elif key in PRIVATE and not show_private:
                 txt = txt[:4] + "*" * max(0, len(txt) - 4) + "  [--private to show]"
             if key == "immo_flag":
                 on = raw[0] == raw[1] == 1
                 txt += f"   -> immobiliser {'ON' if on else 'OFF'}"
+            elif key == "p0602_flag":
+                state = {0: "clear", 2: "SET"}.get(sum(b >> 7 for b in raw), "copies DISAGREE")
+                txt += f"   -> programming flag (bit 7) {state}"
+            elif key == "lockout":
+                txt += "   -> none" if not any(raw) else "   -> lockout bytes set"
             print(f"    {key:<13} {txt}")
 
     def ascii(self, n: int) -> str:
