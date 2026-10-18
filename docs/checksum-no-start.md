@@ -98,10 +98,29 @@ calibration as v0.02.1**. It differs from the clean v0.02.1 export in only
   multipoint checksum table and program checksum. Every WinOLS save on file
   has a correct main checksum, so a WinOLS merge would have fixed it; a raw
   read keeps whatever was flashed.
-- **The cat edit is what needed the main checksum.** v0.02 → v0.02.1 ("numb
-  cats") changes just **4 calibration bytes**, all inside MD5/main-checksum
-  range 3: `0x8188F1–F3` (`9a fd fd` → `ff ff ff`) and `0x81A2D9`
-  (`46` → `50`).
+- **Every edit needed the main checksum, not just the cat edit.** All of the
+  changes sit inside the main-checksum/MD5 ranges, and every saved file carries
+  a correct main checksum:
+
+  | Edit | Range 1 | Range 2 | Range 3 | Range 4 | Outside | Main checksum in file |
+  |---|---|---|---|---|---|---|
+  | stock → v0.01 (load bump) | 0 | 0 | 0 | 30 | 0 | `0x00A6799B` ✓ |
+  | v0.01 → v0.02 (mild tune) | 1 | 26 | 0 | 89 | 0 | `0x00A67BF8` ✓ |
+  | v0.02 → v0.02.1 (numb cats) | 0 | 0 | **4** | 0 | 0 | `0x00A67C6B` ✓ |
+  | v0.02 → v0.02.2 (cats/O2 off) | 0 | 0 | **12** | 0 | 0 | `0x00A67C42` ✓ |
+  | v0.02 → v0.03 | 274 | 446 | 136 | 61 | 0 | `0x00A662CC` ✓ |
+
+  The power tune (stock → v0.02: 146 bytes in ranges 1, 2 and 4) required a
+  new main checksum and RSA signature as much as the cat edit did, got correct
+  ones, and flashed fine in 2013. The cat edit's 4 bytes are `0x8188F1–F3`
+  (`9a fd fd` → `ff ff ff`) and `0x81A2D9` (`46` → `50`).
+
+  **What *is* different about it:** it was the **first flashed edit in
+  range 3**. v0.02 never touched range 3; v0.02.1 did, and its flashed main
+  checksum came out wrong. That's **only suggestive** of whatever computed the
+  bad value mishandling range 3. `0x0007361F` is smaller than the byte sum of
+  any single range (the smallest is about `0x128E89`), so it isn't simply
+  "the sum without range 3" either.
 - **The bad value was inside the image that was flashed.** The readout's
   program-area checksums (RSA signature, program checksum) are v0.02.1's, so
   the program area was written; this wasn't a data-only write that left an
