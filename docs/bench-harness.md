@@ -51,7 +51,7 @@ Not needed on the bench, but these come up when reading the diagrams:
 | CAN low | 58 | ORG/BRN |
 | CAN high | 60 | ORG/BLK |
 | Crash signal | 67 | VIO/BLU, from the airbag module |
-| Instrument cluster | — | Via the K-line splice; **not needed**, the immobiliser is off in flash on this ECU (see [immo-off.md](immo-off.md)) |
+| Instrument cluster | — | Via the K-line splice; **not needed**. The immobiliser only blocks engine start, not K-line flashing or boot mode. This ECU's EEPROM reads immobiliser **on** (see [immo-off.md](immo-off.md)) |
 
 The VAG colour convention is orange/brown = CAN-L, orange/black = CAN-H,
 which is how 58 and 60 are assigned above. The Nefmoto wiki's VR6 table has
