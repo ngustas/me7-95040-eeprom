@@ -130,6 +130,8 @@ carries the flashing tool's stamp. When bit 7 of that byte is set, the ECU
 runs the block, which begins by loading the magic value `0xA5F0`. The ECU
 then treats itself as not properly programmed.
 
+**Live read: the bit is set on this ECU today** (section 7).
+
 **Inferred.** The firmware hasn't been traced far enough to show which routine
 sets page 30 byte 8 bit 7, or how it relates to the P0601 bytes. Only two
 direct code references to that byte exist: the test above and a read at
@@ -185,10 +187,46 @@ day, v0.08 was run through **ME7Sum twice**, producing `Fixed.bin` and
   signature
 - **0 errors** on all 72 checks, P1681 patch included.
 
-Which image was flashed last is **unknown**. Reading the ECU and comparing it
-against these files will tell.
+Which image was flashed last is **unknown**. The live EEPROM read below can't
+answer that, because it reads the EEPROM, not the flash. A flash read would:
+current NefMoto connects to this ECU, since it retries slow init at `0x11`.
 
-## 7. Recovery options, from cleanest to bluntest
+## 7. The ECU's live state (2026-10-18)
+
+The EEPROM contents were read from the running ECU's RAM shadow over KWP2000
+with [`tools/me7_kwp_shadow.py`](../tools/me7_kwp_shadow.py), without opening
+the ECU. The rebuilt page image validates cleanly. Compared with the 2013
+dump:
+
+| What | 2013 dump | Live (2026) |
+|---|---|---|
+| P0601 bytes, `0x1C` / `0x2C` | `00` / `00` | `00` / `00` (clear) |
+| **Page 30 byte 8** ("programming not complete") | `00` | **`80`: bit 7 set** |
+| Page 30 bytes 9–10 | `05 0d` | `1d 29` |
+| Immobiliser flag, `0x12` / `0x22` | `01` / `01` | `02` / `02` (off; see [immo-off.md](immo-off.md)) |
+
+This **proves** the flag that the P1681 check reads is **set on this ECU right
+now**. Unpatched firmware would run the "programming not complete" block. The
+P1681 patch is what keeps the car running, not a clean flag. Two consequences:
+
+- **Don't flash an unpatched image** (for example stock, v0.01–v0.04 or
+  v0.02.x) onto this ECU without dealing with that flag first. The ECU would act
+  on it.
+- Clearing it would mean writing pages 30/31, which are a mirrored pair
+  (page 31 borrows page 30's checksum index). **This hasn't been tried.** Nothing
+  here shows that bit 7 is the only thing that matters, and bytes 9–10 changed
+  too.
+
+Which routine set the flag, and when, still isn't known (see section 4). The
+P0601 bytes are clear, so if that path stored an error, it has been cleared
+since.
+
+Pages 5–7, 17 and 23–27 also changed. Pages 23–27 went from all zeros to
+repeating 6-byte entries. What those pages hold is covered, or flagged as
+unknown, in [95040-format.md](95040-format.md). They play no known part in
+this story.
+
+## 8. Recovery options, from cleanest to bluntest
 
 1. **Re-sign the image before flashing.** `me7sum in.bin out.bin` replaces
    the modulus and signature with a fresh key pair and fixes every other

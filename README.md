@@ -31,6 +31,7 @@ mean the donor car was an allroad: late C5 A6 2.7Ts used it as well.
 |---|---|
 | [`me7_95040.py`](me7_95040.py) | Validate and decode 95040 images: checksums, backup pages, named fields, side-by-side comparison, round-trip check |
 | [`tools/me7_flash_info.py`](tools/me7_flash_info.py) | Identify an ME7 flash image and dump its EEPROM page attribute table |
+| [`tools/me7_kwp_shadow.py`](tools/me7_kwp_shadow.py) | Read the EEPROM's RAM copy from a running ECU over KWP2000 (K-line, slow init `0x11`), without opening it. Read-only, and not a full chip dump |
 | [`tools/pyc27.py`](tools/pyc27.py) | Read and disassemble Python 2.7 `.pyc` files from Python 3. This is how 95040tool's logic was recovered |
 | [`docs/95040-format.md`](docs/95040-format.md) | **The format reference**: checksum, page lists, full 32-page map, field offsets |
 | [`docs/checksum-no-start.md`](docs/checksum-no-start.md) | **Case study**: how a tune with an incomplete checksum caused a no-start after a few key cycles, and the P1681 patch that fixed it |
@@ -43,7 +44,8 @@ mean the donor car was an allroad: late C5 A6 2.7Ts used it as well.
 
 ## Quick start
 
-All the scripts need **Python 3.12+** and nothing else. Each has a
+All the scripts need **Python 3.12+**. Only `me7_kwp_shadow.py` needs
+anything else: `pyserial`. Each script has a
 [PEP 723](https://peps.python.org/pep-0723/) header, so `uv run` works as well.
 
 ```bash
@@ -54,6 +56,7 @@ python me7_95040.py -r dump.bin                  # per-page dump with status
 python me7_95040.py -c a.bin b.bin c.bin         # compare images side by side
 python me7_95040.py --canon dump.bin -o out.bin  # show where a naive writer diverges
 python tools/me7_flash_info.py flash.bin --table # idents + EEPROM page table
+python tools/me7_kwp_shadow.py COM8 live.bin     # EEPROM RAM copy from a running ECU
 ```
 
 `me7_95040.py` exits with 1 if any page fails its checksum for no known
@@ -90,6 +93,14 @@ reason, so it can be dropped into a test script.
   MD5. The ECU then refused to start after a couple of key cycles. The fix
   used was the one-byte P1681 patch at `0x86C0B6`, which skips the check of
   EEPROM page 30 byte 8 bit 7. See
+  [`docs/checksum-no-start.md`](docs/checksum-no-start.md).
+
+- **This ECU answers KW1281 at slow-init address `0x01` and KWP2000 only at
+  `0x11`.** Old tools that wake the ECU at `0x01` (ME7EEPROM, me7_95040) can't
+  read it over OBD. Current NefMoto retries at `0x11`.
+- **Live state (2026-10-18):** the immobiliser is off in the EEPROM, and the
+  "programming not complete" bit (page 30 byte 8 bit 7) is **set**. The
+  P1681 patch is what keeps the car running. See
   [`docs/checksum-no-start.md`](docs/checksum-no-start.md).
 
 Still unidentified: what the values on pages 5/6, 7/8, 9/10 and 21–25 *mean*

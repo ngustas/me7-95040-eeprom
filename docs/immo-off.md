@@ -54,22 +54,35 @@ will catch a bad transfer.
 
 ## Status of the reference ECU
 
-- The **only** EEPROM image of this ECU on file is `bporg95040.bin`
-  (2013-10-20). It reads **`01 01` — immobiliser on**. All tuning files and
-  the machine backups were searched for it: every 512-byte file was matched
-  against this ECU's VIN and immobiliser ID, and only copies of that one dump
-  turned up.
-- If the immobiliser was later turned off in the EEPROM, the resulting image
-  was not kept. One clue: on 2020-12-21, four
-  95040 images were gathered together on one machine. They were this ECU's
-  2013 dump, the virgin template, the "ME7.1.1 OFF" image and `2392.bin`.
-  That is consistent with preparing an EEPROM immo-off at that point.
-- None of the 15 distinct flash images on file contains a **code change aimed at
-  the immobiliser**. The only code patch is the one-byte P1681 fix (see
-  [checksum-no-start.md](checksum-no-start.md)). A calibration-level immo
-  setting can't be ruled out without map definitions for this software.
-- **To settle it:** read the ECU's EEPROM in bootmode and run
-  `python me7_95040.py -f dump.bin`.
+**Settled by a live read (2026-10-18): the immobiliser is OFF in this ECU's
+EEPROM.**
+
+The EEPROM contents were read from the running ECU's RAM shadow over
+KWP2000 with [`tools/me7_kwp_shadow.py`](../tools/me7_kwp_shadow.py), without
+opening the ECU. The rebuilt page image validates cleanly, and:
+
+```
+         0x12  0x1E/1F     0x22  0x2E/2F
+2013     01    31 fc       01    30 fc      bporg95040.bin: immobiliser on
+now      02    30 fc       02    2f fc      live read: immobiliser OFF
+```
+
+The live bytes match the worked example above exactly, checksums included.
+The immo-off was therefore done in the EEPROM, at some point after the 2013
+dump. That 2013 dump is still the only *file* of this ECU's EEPROM: the
+tuning files and machine backups were searched, every 512-byte file was
+matched against this ECU's VIN and immobiliser ID, and only copies of it
+turned up. So the modified image was never saved. One clue to when it
+happened: on 2020-12-21, this ECU's 2013 dump, the virgin template, the
+"ME7.1.1 OFF" image and `2392.bin` were gathered together on one machine.
+
+Other points:
+
+- None of the 15 distinct flash images on file contains a **code change aimed
+  at the immobiliser**. The only code patch is the one-byte P1681 fix (see
+  [checksum-no-start.md](checksum-no-start.md)).
+- The live read covers pages 1–17, 20–27 and 30–31. Page 0, 18, 19, 28 and 29
+  aren't held in RAM, so a full chip image still needs a bootmode read.
 
 On a bench the immobiliser only blocks the engine from starting. Diagnostics,
 flashing and bootmode access work either way, so the remote-bench setup
